@@ -30,7 +30,9 @@ async function descargarArchivo(ctx, fileId) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`No pude descargar el audio (${res.status})`);
   const arrayBuf = await res.arrayBuffer();
-  const ext = (file.file_path.split('.').pop() || 'oga').toLowerCase();
+  let ext = (file.file_path.split('.').pop() || 'ogg').toLowerCase();
+  // Telegram manda las notas de voz como .oga; Groq acepta ogg/opus, no oga.
+  if (ext === 'oga') ext = 'ogg';
   return { buffer: Buffer.from(arrayBuf), filename: `audio.${ext}` };
 }
 
