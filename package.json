@@ -1,0 +1,25 @@
+{
+  "name": "asistente-telegram",
+  "version": "1.0.0",
+  "description": "Bot de Telegram (asistente personal por audio) + Mini App con graficos",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "build": "npm run build:webapp",
+    "build:webapp": "cd webapp && npm install && npm run build"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "better-sqlite3": "^11.3.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "grammy": "^1.30.0",
+    "luxon": "^3.5.0",
+    "node-cron": "^3.0.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

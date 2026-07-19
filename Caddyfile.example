@@ -1,0 +1,10 @@
+# Caddy hace HTTPS automatico (Let's Encrypt) y reenvia todo al backend Node.
+# 1) Apuntá tu dominio (A record) a la IP del VPS.
+# 2) Reemplazá miapp.midominio.com por tu dominio real.
+# 3) Guardalo como /etc/caddy/Caddyfile y corré:  sudo systemctl reload caddy
+#
+# La Mini App queda servida en https://miapp.midominio.com  (esa es tu WEBAPP_URL)
+
+miapp.midominio.com {
+    reverse_proxy localhost:3000
+}
