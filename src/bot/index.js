@@ -1,12 +1,31 @@
 import { Bot } from 'grammy';
 import { procesarMensaje } from './claude.js';
 import { transcribir } from './transcribe.js';
+import { estaAutorizado } from '../util/access.js';
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
   throw new Error('Falta TELEGRAM_BOT_TOKEN en el .env');
 }
 
 export const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN);
+
+// --- /id: cualquiera puede pedir su propio ID de Telegram (sirve para autorizarlo) ---
+bot.command('id', async (ctx) => {
+  await ctx.reply(`Tu ID de Telegram es: ${ctx.from.id}`);
+});
+
+// --- Control de acceso: si el bot es privado, bloquear a los no autorizados ---
+bot.use(async (ctx, next) => {
+  const uid = ctx.from?.id;
+  if (uid && !estaAutorizado(uid)) {
+    await ctx.reply(
+      '🔒 Este bot es privado y no estás autorizado a usarlo.\n' +
+      `Si sos el dueño, agregá este ID a ALLOWED_USER_IDS: ${uid}`
+    );
+    return; // corta acá: no ejecuta ningún otro handler
+  }
+  await next();
+});
 
 // --- /start ---
 bot.command('start', async (ctx) => {

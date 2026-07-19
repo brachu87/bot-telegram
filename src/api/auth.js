@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { estaAutorizado } from '../util/access.js';
 
 /**
  * Valida el initData de una Telegram Mini App segun la doc oficial.
@@ -64,6 +65,10 @@ export function authMiddleware(req, res, next) {
   const resultado = validarInitData(initData, process.env.TELEGRAM_BOT_TOKEN);
   if (!resultado.ok) {
     return res.status(401).json({ error: 'No autorizado', detalle: resultado.error });
+  }
+  // Si el bot es privado, solo los IDs autorizados pueden ver datos en la Mini App.
+  if (!estaAutorizado(resultado.user.id)) {
+    return res.status(403).json({ error: 'No autorizado', detalle: 'usuario no permitido' });
   }
   req.telegramUser = resultado.user;
   req.userId = resultado.user.id;
