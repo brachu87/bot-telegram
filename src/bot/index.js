@@ -1,7 +1,7 @@
 import { Bot, InputFile } from 'grammy';
 import { procesarMensaje } from './claude.js';
 import { transcribir } from './transcribe.js';
-import { estaAutorizado } from '../util/access.js';
+import { estaAutorizado, esAdmin, agregarCliente, quitarCliente, listarClientes } from '../util/access.js';
 import { chequearLimite } from '../util/usage.js';
 import { generarExcel } from '../export/excel.js';
 import { generarPDF } from '../export/pdf.js';
@@ -22,8 +22,8 @@ bot.use(async (ctx, next) => {
   const uid = ctx.from?.id;
   if (uid && !estaAutorizado(uid)) {
     await ctx.reply(
-      '🔒 Este bot es privado y no estás autorizado a usarlo.\n' +
-      `Si sos el dueño, agregá este ID a ALLOWED_USER_IDS: ${uid}`
+      '🔒 Este bot es privado. Para usarlo necesitás que te den de alta.\n' +
+      `Pasale este número a quien te ofreció el servicio: ${uid}`
     );
     return; // corta acá: no ejecuta ningún otro handler
   }
@@ -44,6 +44,44 @@ bot.command('start', async (ctx) => {
     'Tocá el botón 📊 para ver tu resumen con gráficos.\n' +
     'Escribí /excel o /pdf para descargar tus datos.'
   );
+});
+
+// --- Comandos de administrador (solo para los ADMIN_IDS): gestionar clientes ---
+bot.command('autorizar', async (ctx) => {
+  if (!esAdmin(ctx.from.id)) return;
+  const partes = (ctx.match || '').trim().split(/\s+/);
+  const id = parseInt(partes[0], 10);
+  if (!id) {
+    await ctx.reply('Uso: /autorizar <id_de_telegram> [alias]\nEj: /autorizar 12345678 Kiosco Juan');
+    return;
+  }
+  const alias = partes.slice(1).join(' ') || null;
+  agregarCliente(id, alias);
+  await ctx.reply(`✅ Cliente autorizado: ${id}${alias ? ' (' + alias + ')' : ''}`);
+});
+
+bot.command('baja', async (ctx) => {
+  if (!esAdmin(ctx.from.id)) return;
+  const id = parseInt((ctx.match || '').trim(), 10);
+  if (!id) {
+    await ctx.reply('Uso: /baja <id_de_telegram>\nEj: /baja 12345678');
+    return;
+  }
+  const ok = quitarCliente(id);
+  await ctx.reply(ok ? `✅ Cliente dado de baja: ${id}` : `No encontré ningún cliente con id ${id}.`);
+});
+
+bot.command('clientes', async (ctx) => {
+  if (!esAdmin(ctx.from.id)) return;
+  const lista = listarClientes();
+  if (lista.length === 0) {
+    await ctx.reply('Todavía no tenés clientes cargados. Usá /autorizar <id> [alias].');
+    return;
+  }
+  const texto = lista
+    .map(c => `• ${c.user_id}${c.alias ? ' — ' + c.alias : ''}  (alta: ${(c.alta_en || '').slice(0, 10)})`)
+    .join('\n');
+  await ctx.reply(`👥 Clientes activos (${lista.length}):\n${texto}`);
 });
 
 // --- /excel y /pdf: generan un reporte y lo mandan como archivo ---
