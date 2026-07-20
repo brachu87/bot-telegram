@@ -143,6 +143,21 @@ export const toolDefs = [
       properties: { query: { type: 'string' } },
       required: ['query']
     }
+  },
+
+  // --- Exportar ---
+  {
+    name: 'exportar_datos',
+    description: 'Genera un reporte con los datos del usuario (gastos, ingresos, deudas, notas, recordatorios) y se lo manda como archivo. Usar cuando el usuario pide un excel, una planilla, un pdf, un reporte o "pasame mis datos". Podés acotar por rango de fechas resolviendo fechas relativas ("de junio", "este mes") contra la fecha actual del system prompt.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        formato: { type: 'string', enum: ['excel', 'pdf'], description: 'excel o pdf. Si el usuario no aclara, usar excel.' },
+        desde: { type: 'string', description: 'Fecha inicial YYYY-MM-DD (opcional). Omitir para incluir todo.' },
+        hasta: { type: 'string', description: 'Fecha final YYYY-MM-DD (opcional). Omitir para incluir todo.' }
+      },
+      required: ['formato']
+    }
   }
 ];
 
@@ -289,6 +304,15 @@ export function ejecutarTool(nombre, input, ctx) {
         'SELECT id, texto, etiqueta, creado_en FROM notas WHERE user_id = ? AND (texto LIKE ? OR etiqueta LIKE ?) ORDER BY id DESC LIMIT 30'
       ).all(userId, q, q);
       return { ok: true, resultados: rows };
+    }
+
+    case 'exportar_datos': {
+      const formato = input.formato === 'pdf' ? 'pdf' : 'excel';
+      // Registramos el pedido; el bot genera y envia el archivo despues de responder.
+      if (Array.isArray(ctx.archivos)) {
+        ctx.archivos.push({ formato, desde: input.desde || null, hasta: input.hasta || null });
+      }
+      return { ok: true, formato, desde: input.desde || null, hasta: input.hasta || null, nota: 'El archivo se envía a continuación.' };
     }
 
     default:

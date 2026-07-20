@@ -44,6 +44,8 @@ export async function procesarMensaje(userId, chatId, textoUsuario) {
   const messages = cargarHistorial(userId, chatId);
   messages.push({ role: 'user', content: textoUsuario });
 
+  // Archivos que las tools piden enviar (ej: exportar_datos). El bot los manda al final.
+  const archivos = [];
   let respuestaFinal = '';
 
   for (let i = 0; i < MAX_ITERACIONES; i++) {
@@ -65,7 +67,7 @@ export async function procesarMensaje(userId, chatId, textoUsuario) {
         if (block.type === 'tool_use') {
           let resultado;
           try {
-            resultado = ejecutarTool(block.name, block.input || {}, { userId, chatId });
+            resultado = ejecutarTool(block.name, block.input || {}, { userId, chatId, archivos });
           } catch (err) {
             resultado = { ok: false, error: String(err.message || err) };
           }
@@ -97,5 +99,5 @@ export async function procesarMensaje(userId, chatId, textoUsuario) {
   guardarMensaje(userId, chatId, 'user', textoUsuario);
   guardarMensaje(userId, chatId, 'assistant', respuestaFinal);
 
-  return respuestaFinal;
+  return { texto: respuestaFinal, archivos };
 }

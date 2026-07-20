@@ -81,13 +81,35 @@ async function descargarArchivo(ctx, fileId) {
   return { buffer: Buffer.from(arrayBuf), filename: `audio.${ext}` };
 }
 
+// --- Genera y envia un reporte pedido por el usuario (via tool exportar_datos) ---
+async function enviarReporte(ctx, pedido) {
+  const { formato, desde, hasta } = pedido;
+  await ctx.replyWithChatAction('upload_document').catch(() => {});
+  if (formato === 'pdf') {
+    const buf = await generarPDF(ctx.from.id, desde, hasta);
+    await ctx.replyWithDocument(new InputFile(buf, 'reporte.pdf'));
+  } else {
+    const buf = await generarExcel(ctx.from.id, desde, hasta);
+    await ctx.replyWithDocument(new InputFile(buf, 'reporte.xlsx'));
+  }
+}
+
 // --- Handler comun: obtiene el texto (transcribiendo si hace falta) y responde ---
 async function manejarMensaje(ctx, texto) {
   const userId = ctx.from.id;
   const chatId = ctx.chat.id;
   await ctx.replyWithChatAction('typing').catch(() => {});
-  const respuesta = await procesarMensaje(userId, chatId, texto);
+  const { texto: respuesta, archivos } = await procesarMensaje(userId, chatId, texto);
   await ctx.reply(respuesta);
+  // Enviar los reportes que Claude haya pedido con la tool exportar_datos
+  for (const pedido of archivos || []) {
+    try {
+      await enviarReporte(ctx, pedido);
+    } catch (err) {
+      console.error('Error enviando reporte:', err);
+      await ctx.reply('Generé la respuesta pero no pude armar el archivo 😕 Probá con /excel o /pdf.');
+    }
+  }
 }
 
 // --- Audios / notas de voz ---
