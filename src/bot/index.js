@@ -1,7 +1,9 @@
-import { Bot } from 'grammy';
+import { Bot, InputFile } from 'grammy';
 import { procesarMensaje } from './claude.js';
 import { transcribir } from './transcribe.js';
 import { estaAutorizado } from '../util/access.js';
+import { generarExcel } from '../export/excel.js';
+import { generarPDF } from '../export/pdf.js';
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
   throw new Error('Falta TELEGRAM_BOT_TOKEN en el .env');
@@ -38,8 +40,32 @@ bot.command('start', async (ctx) => {
     '• Notas 📝\n\n' +
     'Ejemplos: "gasté 15 lucas en el súper", "le debo 50 lucas a Juan por el sábado", ' +
     '"recordame mañana a las 9 llamar al contador".\n\n' +
-    'Tocá el botón 📊 para ver tu resumen con gráficos.'
+    'Tocá el botón 📊 para ver tu resumen con gráficos.\n' +
+    'Escribí /excel o /pdf para descargar tus datos.'
   );
+});
+
+// --- /excel y /pdf: generan un reporte y lo mandan como archivo ---
+bot.command('excel', async (ctx) => {
+  try {
+    await ctx.replyWithChatAction('upload_document').catch(() => {});
+    const buf = await generarExcel(ctx.from.id);
+    await ctx.replyWithDocument(new InputFile(buf, 'reporte.xlsx'), { caption: 'Tu reporte en Excel 📊' });
+  } catch (err) {
+    console.error('Error /excel:', err);
+    await ctx.reply('Se me complicó generar el Excel 😕 Probá de nuevo en un ratito.');
+  }
+});
+
+bot.command('pdf', async (ctx) => {
+  try {
+    await ctx.replyWithChatAction('upload_document').catch(() => {});
+    const buf = await generarPDF(ctx.from.id);
+    await ctx.replyWithDocument(new InputFile(buf, 'reporte.pdf'), { caption: 'Tu reporte en PDF 📄' });
+  } catch (err) {
+    console.error('Error /pdf:', err);
+    await ctx.reply('Se me complicó generar el PDF 😕 Probá de nuevo en un ratito.');
+  }
 });
 
 // --- Descarga de un archivo de Telegram como Buffer ---

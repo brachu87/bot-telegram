@@ -23,6 +23,24 @@ export const api = {
   notas: (query) => get(`/notas${qs({ query })}`)
 };
 
+// Descarga un archivo (Excel o PDF) mandando el initData como header.
+export async function descargar(formato, desde, hasta) {
+  const path = formato === 'pdf' ? '/export/pdf' : '/export/excel';
+  const res = await fetch(`/api${path}${qs({ desde, hasta })}`, {
+    headers: { 'X-Telegram-Init-Data': getInitData() }
+  });
+  if (!res.ok) throw new Error(`Error ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = formato === 'pdf' ? 'reporte.pdf' : 'reporte.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function qs(obj) {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(obj)) {

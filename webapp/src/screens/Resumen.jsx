@@ -3,7 +3,7 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
   Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
-import { api, fmtPesos } from '../api.js';
+import { api, fmtPesos, descargar } from '../api.js';
 
 const COLORS = ['#2481cc', '#e0393e', '#1a9d4b', '#f5a623', '#9b51e0', '#00b8d9', '#ff6b6b', '#8e8e93'];
 
@@ -28,6 +28,19 @@ export default function Resumen() {
   const [mensual, setMensual] = useState(null);
   const [error, setError] = useState(null);
   const [cargando, setCargando] = useState(true);
+  const [bajando, setBajando] = useState(null);
+
+  async function exportar(formato) {
+    try {
+      setBajando(formato);
+      const r = rangos()[periodo];
+      await descargar(formato, r.desde, r.hasta);
+    } catch (e) {
+      alert('No pude descargar el archivo: ' + e.message);
+    } finally {
+      setBajando(null);
+    }
+  }
 
   useEffect(() => {
     let vivo = true;
@@ -79,6 +92,14 @@ export default function Resumen() {
             <div className="label">Gastos</div>
             <div className="value neg">{fmtPesos(resumen.gastos)}</div>
           </div>
+        </div>
+        <div className="export-row">
+          <button disabled={!!bajando} onClick={() => exportar('excel')}>
+            {bajando === 'excel' ? '…' : '⬇️ Excel'}
+          </button>
+          <button disabled={!!bajando} onClick={() => exportar('pdf')}>
+            {bajando === 'pdf' ? '…' : '⬇️ PDF'}
+          </button>
         </div>
       </div>
 

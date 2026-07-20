@@ -3,6 +3,8 @@ import db from '../db/index.js';
 import { authMiddleware } from './auth.js';
 import { normalizarFecha, utcALegible, ZONA } from '../util/dates.js';
 import { DateTime } from 'luxon';
+import { generarExcel } from '../export/excel.js';
+import { generarPDF } from '../export/pdf.js';
 
 const router = Router();
 
@@ -132,6 +134,32 @@ router.get('/notas', (req, res) => {
     rows = db.prepare('SELECT id, texto, etiqueta, creado_en FROM notas WHERE user_id=? ORDER BY id DESC').all(uid);
   }
   res.json({ notas: rows });
+});
+
+// GET /api/export/excel?desde=&hasta=  -> descarga .xlsx
+router.get('/export/excel', async (req, res) => {
+  try {
+    const buf = await generarExcel(req.userId, req.query.desde, req.query.hasta);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="reporte.xlsx"');
+    res.send(buf);
+  } catch (e) {
+    console.error('Error generando Excel:', e);
+    res.status(500).json({ error: 'No pude generar el Excel' });
+  }
+});
+
+// GET /api/export/pdf?desde=&hasta=  -> descarga .pdf
+router.get('/export/pdf', async (req, res) => {
+  try {
+    const buf = await generarPDF(req.userId, req.query.desde, req.query.hasta);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="reporte.pdf"');
+    res.send(buf);
+  } catch (e) {
+    console.error('Error generando PDF:', e);
+    res.status(500).json({ error: 'No pude generar el PDF' });
+  }
 });
 
 export default router;
