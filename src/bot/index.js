@@ -2,6 +2,7 @@ import { Bot, InputFile } from 'grammy';
 import { procesarMensaje } from './claude.js';
 import { transcribir } from './transcribe.js';
 import { estaAutorizado } from '../util/access.js';
+import { chequearLimite } from '../util/usage.js';
 import { generarExcel } from '../export/excel.js';
 import { generarPDF } from '../export/pdf.js';
 
@@ -99,6 +100,14 @@ async function enviarReporte(ctx, pedido) {
 async function manejarMensaje(ctx, texto) {
   const userId = ctx.from.id;
   const chatId = ctx.chat.id;
+
+  // Control de costos: tope de mensajes por dia por usuario (si esta configurado)
+  const limite = chequearLimite(userId);
+  if (!limite.permitido) {
+    await ctx.reply(`Llegaste al máximo de mensajes por hoy (${limite.limite}). Seguimos mañana 🙂`);
+    return;
+  }
+
   await ctx.replyWithChatAction('typing').catch(() => {});
   const { texto: respuesta, archivos } = await procesarMensaje(userId, chatId, texto);
   await ctx.reply(respuesta);
