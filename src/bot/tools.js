@@ -148,11 +148,13 @@ export const toolDefs = [
   // --- Exportar ---
   {
     name: 'exportar_datos',
-    description: 'Genera un reporte con los datos del usuario (gastos, ingresos, deudas, notas, recordatorios) y se lo manda como archivo. Usar cuando el usuario pide un excel, una planilla, un pdf, un reporte o "pasame mis datos". Podés acotar por rango de fechas resolviendo fechas relativas ("de junio", "este mes") contra la fecha actual del system prompt.',
+    description: 'Genera un reporte con los datos del usuario y se lo manda como archivo. Usar cuando el usuario pide un excel, una planilla, un pdf, un reporte o "pasame mis datos". Podés acotar por rango de fechas (resolviendo fechas relativas como "de junio" contra la fecha actual), por tipo de dato, y/o por una persona puntual.',
     input_schema: {
       type: 'object',
       properties: {
         formato: { type: 'string', enum: ['excel', 'pdf'], description: 'excel o pdf. Si el usuario no aclara, usar excel.' },
+        tipo: { type: 'string', enum: ['todo', 'gastos', 'ingresos', 'personas', 'notas', 'recordatorios'], description: 'Qué exportar. "gastos" = solo gastos; "personas" = deudas/pagos por persona; "todo" = todo (default).' },
+        persona: { type: 'string', description: 'Nombre de una persona puntual para exportar solo sus deudas/pagos (ej: "Juan"). Opcional.' },
         desde: { type: 'string', description: 'Fecha inicial YYYY-MM-DD (opcional). Omitir para incluir todo.' },
         hasta: { type: 'string', description: 'Fecha final YYYY-MM-DD (opcional). Omitir para incluir todo.' }
       },
@@ -308,11 +310,16 @@ export function ejecutarTool(nombre, input, ctx) {
 
     case 'exportar_datos': {
       const formato = input.formato === 'pdf' ? 'pdf' : 'excel';
+      const pedido = {
+        formato,
+        tipo: input.tipo || 'todo',
+        persona: input.persona || null,
+        desde: input.desde || null,
+        hasta: input.hasta || null
+      };
       // Registramos el pedido; el bot genera y envia el archivo despues de responder.
-      if (Array.isArray(ctx.archivos)) {
-        ctx.archivos.push({ formato, desde: input.desde || null, hasta: input.hasta || null });
-      }
-      return { ok: true, formato, desde: input.desde || null, hasta: input.hasta || null, nota: 'El archivo se envía a continuación.' };
+      if (Array.isArray(ctx.archivos)) ctx.archivos.push(pedido);
+      return { ok: true, ...pedido, nota: 'El archivo se envía a continuación.' };
     }
 
     default:

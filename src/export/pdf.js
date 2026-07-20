@@ -4,8 +4,9 @@ import { fmtPesos } from '../util/money.js';
 import { ahora } from '../util/dates.js';
 
 // Genera un Buffer con un PDF del usuario.
-export function generarPDF(userId, desde, hasta) {
-  const d = reunirDatos(userId, desde, hasta);
+export function generarPDF(userId, desde, hasta, opciones = {}) {
+  const d = reunirDatos(userId, desde, hasta, opciones);
+  const inc = d.incluir;
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -29,18 +30,20 @@ export function generarPDF(userId, desde, hasta) {
     doc.fillColor('black');
 
     // Resumen
-    h1('Resumen');
-    linea(`Ingresos: ${fmtPesos(d.totalIngresos)}`);
-    linea(`Gastos: ${fmtPesos(d.totalGastos)}`);
-    doc.font('Helvetica-Bold'); linea(`Balance: ${fmtPesos(d.balance)}`); doc.font('Helvetica');
+    if (inc.resumen) {
+      h1('Resumen');
+      linea(`Ingresos: ${fmtPesos(d.totalIngresos)}`);
+      linea(`Gastos: ${fmtPesos(d.totalGastos)}`);
+      doc.font('Helvetica-Bold'); linea(`Balance: ${fmtPesos(d.balance)}`); doc.font('Helvetica');
 
-    if (d.porCategoria.length) {
-      doc.moveDown(0.4).fontSize(11).text('Gastos por categoría:');
-      d.porCategoria.forEach(c => linea(`  • ${c.categoria}: ${fmtPesos(c.total)}`));
+      if (d.porCategoria.length) {
+        doc.moveDown(0.4).fontSize(11).text('Gastos por categoría:');
+        d.porCategoria.forEach(c => linea(`  • ${c.categoria}: ${fmtPesos(c.total)}`));
+      }
     }
 
     // Personas y deudas
-    if (d.personas.length) {
+    if (inc.personas && d.personas.length) {
       h1('Personas y deudas');
       d.personas.forEach(p => {
         doc.font('Helvetica-Bold').fontSize(11)
@@ -54,25 +57,25 @@ export function generarPDF(userId, desde, hasta) {
     }
 
     // Gastos (detalle)
-    if (d.gastos.length) {
+    if (inc.gastos && d.gastos.length) {
       h1('Gastos (detalle)');
       d.gastos.forEach(g => linea(`${g.fecha}  [${g.categoria}] ${g.descripcion || ''} — ${fmtPesos(g.monto)}`));
     }
 
     // Ingresos
-    if (d.ingresos.length) {
+    if (inc.ingresos && d.ingresos.length) {
       h1('Ingresos');
       d.ingresos.forEach(g => linea(`${g.fecha}  ${g.descripcion || ''} — ${fmtPesos(g.monto)}`));
     }
 
     // Notas
-    if (d.notas.length) {
+    if (inc.notas && d.notas.length) {
       h1('Notas');
       d.notas.forEach(n => linea(`• ${n.texto}${n.etiqueta ? '  (' + n.etiqueta + ')' : ''}`));
     }
 
     // Recordatorios
-    if (d.recordatorios.length) {
+    if (inc.recordatorios && d.recordatorios.length) {
       h1('Recordatorios');
       d.recordatorios.forEach(r => linea(`• ${r.cuando} — ${r.texto}${r.enviado ? ' (enviado)' : ''}`));
     }

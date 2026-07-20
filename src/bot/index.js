@@ -83,13 +83,14 @@ async function descargarArchivo(ctx, fileId) {
 
 // --- Genera y envia un reporte pedido por el usuario (via tool exportar_datos) ---
 async function enviarReporte(ctx, pedido) {
-  const { formato, desde, hasta } = pedido;
+  const { formato, desde, hasta, tipo, persona } = pedido;
+  const opciones = { tipo: tipo || 'todo', persona: persona || null };
   await ctx.replyWithChatAction('upload_document').catch(() => {});
   if (formato === 'pdf') {
-    const buf = await generarPDF(ctx.from.id, desde, hasta);
+    const buf = await generarPDF(ctx.from.id, desde, hasta, opciones);
     await ctx.replyWithDocument(new InputFile(buf, 'reporte.pdf'));
   } else {
-    const buf = await generarExcel(ctx.from.id, desde, hasta);
+    const buf = await generarExcel(ctx.from.id, desde, hasta, opciones);
     await ctx.replyWithDocument(new InputFile(buf, 'reporte.xlsx'));
   }
 }
