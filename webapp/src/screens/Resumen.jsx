@@ -29,6 +29,7 @@ export default function Resumen() {
   const [error, setError] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [bajando, setBajando] = useState(null);
+  const [tick, setTick] = useState(0); // para refrescar manualmente
 
   async function exportar(formato) {
     try {
@@ -61,7 +62,7 @@ export default function Resumen() {
       .catch(e => vivo && setError(e.message))
       .finally(() => vivo && setCargando(false));
     return () => { vivo = false; };
-  }, [periodo]);
+  }, [periodo, tick]);
 
   if (error) return <div className="screen"><div className="center">⚠️ {error}</div></div>;
   if (cargando || !resumen) return <div className="screen"><div className="loader">Cargando…</div></div>;
@@ -72,7 +73,10 @@ export default function Resumen() {
 
   return (
     <div className="screen">
-      <div className="h1">Mi resumen</div>
+      <div className="header-row">
+        <div className="h1">Mi resumen</div>
+        <button className="refresh-btn" onClick={() => setTick(t => t + 1)}>↻</button>
+      </div>
 
       <div className="period">
         <button className={periodo === 'mes' ? 'active' : ''} onClick={() => setPeriodo('mes')}>Este mes</button>

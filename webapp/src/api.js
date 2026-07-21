@@ -20,7 +20,8 @@ export const api = {
   gastosMensual: (meses = 6) => get(`/gastos/mensual${qs({ meses })}`),
   personas: () => get('/personas'),
   recordatorios: (desde, hasta) => get(`/recordatorios${qs({ desde, hasta })}`),
-  notas: (query) => get(`/notas${qs({ query })}`)
+  notas: (query) => get(`/notas${qs({ query })}`),
+  movimientos: (desde, hasta) => get(`/movimientos${qs({ desde, hasta })}`)
 };
 
 // Descarga un archivo (Excel o PDF) mandando el initData como header.

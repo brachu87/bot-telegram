@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import TabBar from './components/TabBar.jsx';
 import Resumen from './screens/Resumen.jsx';
+import Movimientos from './screens/Movimientos.jsx';
 import Personas from './screens/Personas.jsx';
 import Agenda from './screens/Agenda.jsx';
 import Notas from './screens/Notas.jsx';
@@ -11,6 +12,7 @@ export default function App() {
   return (
     <>
       {tab === 'resumen' && <Resumen />}
+      {tab === 'movimientos' && <Movimientos />}
       {tab === 'personas' && <Personas />}
       {tab === 'agenda' && <Agenda />}
       {tab === 'notas' && <Notas />}

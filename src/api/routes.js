@@ -136,6 +136,34 @@ router.get('/notas', (req, res) => {
   res.json({ notas: rows });
 });
 
+// GET /api/movimientos?desde=&hasta=  -> ingresos + gastos combinados, ordenados por fecha
+router.get('/movimientos', (req, res) => {
+  const { desde: dMes, hasta: hMes } = rangoMesActual();
+  const desde = normalizarFecha(req.query.desde || dMes);
+  const hasta = normalizarFecha(req.query.hasta || hMes);
+  const uid = req.userId;
+
+  const gastos = db.prepare(
+    'SELECT fecha, categoria, descripcion, monto FROM gastos WHERE user_id=? AND fecha>=? AND fecha<=?'
+  ).all(uid, desde, hasta).map(g => ({
+    tipo: 'gasto', fecha: g.fecha, monto: g.monto,
+    detalle: g.descripcion || g.categoria, categoria: g.categoria
+  }));
+
+  const ingresos = db.prepare(
+    'SELECT fecha, descripcion, monto FROM ingresos WHERE user_id=? AND fecha>=? AND fecha<=?'
+  ).all(uid, desde, hasta).map(i => ({
+    tipo: 'ingreso', fecha: i.fecha, monto: i.monto,
+    detalle: i.descripcion || 'Ingreso'
+  }));
+
+  const movimientos = [...gastos, ...ingresos].sort((a, b) =>
+    a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0
+  );
+
+  res.json({ desde, hasta, movimientos });
+});
+
 // GET /api/export/excel?desde=&hasta=  -> descarga .xlsx
 router.get('/export/excel', async (req, res) => {
   try {
