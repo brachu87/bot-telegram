@@ -3,9 +3,10 @@ import db from '../db/index.js';
 import { toolDefs, ejecutarTool } from './tools.js';
 import { construirSystemPrompt } from './prompt.js';
 
-// Modelo configurable por env. Por defecto Haiku (mas barato, de sobra para esta tarea).
-// Para mas calidad en consultas complejas, poner CLAUDE_MODEL=claude-sonnet-4-6
-const MODELO = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
+// Modelo configurable por env. Por defecto Sonnet (mas confiable llamando tools;
+// importante en una app de plata). Para ahorrar, se puede probar Haiku:
+// CLAUDE_MODEL=claude-haiku-4-5-20251001 (mas barato pero a veces no ejecuta la tool).
+const MODELO = process.env.CLAUDE_MODEL || 'claude-sonnet-4-6';
 const MAX_HISTORIAL = 20;    // cuantos mensajes previos recordamos por chat
 const MAX_ITERACIONES = 8;   // tope de vueltas del loop de tool use
 
