@@ -1,7 +1,7 @@
 import db from '../db/index.js';
 import { normalizarFecha, localAUTC, utcALegible } from '../util/dates.js';
 import { fmtPesos } from '../util/money.js';
-import { gestumio, estaVinculado } from '../gestumio/api.js';
+import { gestumio, estaVinculado, guardarUltimo, getUltimo } from '../gestumio/api.js';
 
 // ---------------------------------------------------------------------------
 // Definiciones de tools (formato Anthropic tool use)
@@ -271,6 +271,82 @@ export const toolDefs = [
       required: ['tipo']
     }
   },
+  {
+    name: 'gestumio_crear_turno',
+    description: 'Crea un TURNO en Gestumio para un cliente. Si es con un servicio, pasá el servicio y la hora; si es un trabajo suelto, pasá descripcion y precio.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cliente: { type: 'string', description: 'Nombre del cliente' },
+        servicio: { type: 'string', description: 'Nombre del servicio (opcional). Si no hay, es un turno/trabajo simple.' },
+        fecha: { type: 'string', description: 'Fecha YYYY-MM-DD' },
+        hora: { type: 'string', description: 'Hora de inicio HH:MM (ej: 15:00)' },
+        empleado: { type: 'string', description: 'Empleado asignado (opcional)' },
+        precio: { type: 'number', description: 'Precio (opcional; si hay servicio se toma el del servicio)' },
+        descripcion: { type: 'string', description: 'Descripcion del trabajo (para turnos sin servicio)' }
+      },
+      required: ['cliente', 'fecha']
+    }
+  },
+  {
+    name: 'gestumio_reprogramar_turno',
+    description: 'Mueve/reprograma un turno de un cliente a otra fecha y/o hora.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cliente: { type: 'string' },
+        fecha_actual: { type: 'string', description: 'Fecha actual del turno YYYY-MM-DD (si el cliente tiene varios)' },
+        nueva_fecha: { type: 'string', description: 'Nueva fecha YYYY-MM-DD' },
+        nueva_hora: { type: 'string', description: 'Nueva hora HH:MM' }
+      },
+      required: ['cliente']
+    }
+  },
+  {
+    name: 'gestumio_cancelar_turno',
+    description: 'Cancela un turno de un cliente.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cliente: { type: 'string' },
+        fecha: { type: 'string', description: 'Fecha del turno YYYY-MM-DD (si tiene varios)' }
+      },
+      required: ['cliente']
+    }
+  },
+  {
+    name: 'gestumio_cobrar_cuota',
+    description: 'Registra el cobro de la CUOTA pendiente de un cliente inscripto (paga la mas vieja). Distinto de un cobro suelto.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cliente: { type: 'string' },
+        monto: { type: 'number', description: 'Monto cobrado (opcional; por defecto la cuota completa)' },
+        medio_pago: { type: 'string' }
+      },
+      required: ['cliente']
+    }
+  },
+  {
+    name: 'gestumio_liquidacion',
+    description: 'Liquidacion de un empleado. confirmar=false (default) solo CALCULA y muestra; confirmar=true la REGISTRA en Gestumio. Periodo por defecto: mes actual.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        empleado: { type: 'string' },
+        desde: { type: 'string', description: 'YYYY-MM-DD (opcional)' },
+        hasta: { type: 'string', description: 'YYYY-MM-DD (opcional)' },
+        confirmar: { type: 'boolean', description: 'true para registrarla' },
+        marcar_pagada: { type: 'boolean', description: 'true si ya se la pagaste' }
+      },
+      required: ['empleado']
+    }
+  },
+  {
+    name: 'gestumio_borrar_ultimo',
+    description: 'Borra lo ULTIMO que se cargo en Gestumio por el bot (gasto, cobro, cliente o turno). Usar para "borra eso", "eliminá lo ultimo", "me equivoque".',
+    input_schema: { type: 'object', properties: {} }
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -511,16 +587,19 @@ export async function ejecutarTool(nombre, input, ctx) {
     case 'gestumio_cargar_gasto': {
       if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular con el codigo de Ajustes.' };
       const r = await gestumio.cargarGasto(userId, { amount: input.monto, category: input.categoria, description: input.descripcion, paymentMethod: input.medio_pago, date: input.fecha });
+      if (r.ok) guardarUltimo(userId, 'expense', r.data.id, `gasto $${input.monto} (${input.categoria})`);
       return r.ok ? { ok: true, ...r.data } : { ok: false, error: r.error };
     }
     case 'gestumio_registrar_cobro': {
       if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular con el codigo de Ajustes.' };
       const r = await gestumio.registrarCobro(userId, { amount: input.monto, description: input.descripcion, clientName: input.cliente, date: input.fecha });
+      if (r.ok) guardarUltimo(userId, 'income', r.data.id, `cobro $${input.monto}`);
       return r.ok ? { ok: true, ...r.data } : { ok: false, error: r.error };
     }
     case 'gestumio_crear_cliente': {
       if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular con el codigo de Ajustes.' };
       const r = await gestumio.crearCliente(userId, { name: input.nombre, phone: input.telefono, email: input.email, dni: input.dni, cuit: input.cuit, notes: input.notas });
+      if (r.ok) guardarUltimo(userId, 'client', r.data.id, `cliente ${input.nombre}`);
       return r.ok ? { ok: true, ...r.data } : { ok: false, error: r.error };
     }
     case 'gestumio_consultar': {
@@ -529,6 +608,45 @@ export async function ejecutarTool(nombre, input, ctx) {
       if (input.cliente) params.name = input.cliente;
       const r = await gestumio.consultar(userId, params);
       return r.ok ? { ok: true, ...r.data } : { ok: false, error: r.error };
+    }
+
+    case 'gestumio_crear_turno': {
+      if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular.' };
+      const r = await gestumio.crearTurno(userId, { clientName: input.cliente, serviceName: input.servicio, date: input.fecha, startTime: input.hora, employeeName: input.empleado, price: input.precio, description: input.descripcion });
+      if (r.ok) guardarUltimo(userId, 'appointment', r.data.id, `turno de ${input.cliente}`);
+      return r.ok ? { ok: true, ...r.data } : { ok: false, error: r.error };
+    }
+    case 'gestumio_reprogramar_turno': {
+      if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular.' };
+      const r = await gestumio.reprogramarTurno(userId, { clientName: input.cliente, fromDate: input.fecha_actual, newDate: input.nueva_fecha, newTime: input.nueva_hora });
+      return r.ok ? { ok: true, ...r.data } : { ok: false, error: r.error };
+    }
+    case 'gestumio_cancelar_turno': {
+      if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular.' };
+      const r = await gestumio.cancelarTurno(userId, { clientName: input.cliente, date: input.fecha });
+      return r.ok ? { ok: true, ...r.data } : { ok: false, error: r.error };
+    }
+    case 'gestumio_cobrar_cuota': {
+      if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular.' };
+      const r = await gestumio.cobrarCuota(userId, { clientName: input.cliente, amount: input.monto, method: input.medio_pago });
+      return r.ok ? { ok: true, ...r.data } : { ok: false, error: r.error };
+    }
+    case 'gestumio_liquidacion': {
+      if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular.' };
+      if (input.confirmar) {
+        const r = await gestumio.liquidacionConfirmar(userId, { empleado: input.empleado, desde: input.desde, hasta: input.hasta, marcarPagada: input.marcar_pagada });
+        if (r.ok) guardarUltimo(userId, 'payroll', r.data.id, `liquidacion de ${input.empleado}`);
+        return r.ok ? { ok: true, confirmada: true, ...r.data } : { ok: false, error: r.error };
+      }
+      const r = await gestumio.liquidacionPreview(userId, { empleado: input.empleado, ...(input.desde ? { desde: input.desde } : {}), ...(input.hasta ? { hasta: input.hasta } : {}) });
+      return r.ok ? { ok: true, confirmada: false, ...r.data } : { ok: false, error: r.error };
+    }
+    case 'gestumio_borrar_ultimo': {
+      if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular.' };
+      const u = getUltimo(userId);
+      if (!u) return { ok: false, error: 'No tengo registrado nada reciente cargado por el bot para borrar.' };
+      const r = await gestumio.borrar(userId, { entity: u.entity, id: u.record_id });
+      return r.ok ? { ok: true, borrado: u.descripcion || u.entity } : { ok: false, error: r.error };
     }
 
     default:

@@ -4,6 +4,24 @@ import db from '../db/index.js';
 
 const BASE = (process.env.GESTUMIO_API_URL || 'https://app.gestumio.com').replace(/\/+$/, '');
 
+// Recordar el último registro cargado por cada usuario (para borrarlo si se equivoca)
+db.exec(`CREATE TABLE IF NOT EXISTS gestumio_ultimo (
+  user_id     INTEGER PRIMARY KEY,
+  entity      TEXT NOT NULL,
+  record_id   TEXT NOT NULL,
+  descripcion TEXT,
+  creado_en   TEXT NOT NULL DEFAULT (datetime('now'))
+);`);
+export function guardarUltimo(userId, entity, recordId, descripcion) {
+  if (!entity || !recordId) return;
+  db.prepare(`INSERT INTO gestumio_ultimo (user_id, entity, record_id, descripcion) VALUES (?, ?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET entity=excluded.entity, record_id=excluded.record_id, descripcion=excluded.descripcion, creado_en=datetime('now')`)
+    .run(userId, entity, String(recordId), descripcion || null);
+}
+export function getUltimo(userId) {
+  return db.prepare('SELECT * FROM gestumio_ultimo WHERE user_id = ?').get(userId) || null;
+}
+
 // --- Persistencia del vínculo ---
 export function getLink(userId) {
   return db.prepare('SELECT * FROM gestumio_link WHERE user_id = ?').get(userId) || null;
@@ -62,5 +80,12 @@ export const gestumio = {
     const qs = new URLSearchParams(params).toString();
     return llamar(userId, 'GET', `/query?${qs}`, null);
   },
+  crearTurno: (userId, p) => llamar(userId, 'POST', '/appointment', p),
+  reprogramarTurno: (userId, p) => llamar(userId, 'POST', '/appointment/reschedule', p),
+  cancelarTurno: (userId, p) => llamar(userId, 'POST', '/appointment/cancel', p),
+  cobrarCuota: (userId, p) => llamar(userId, 'POST', '/cobrar-cuota', p),
+  liquidacionPreview: (userId, params) => llamar(userId, 'GET', `/liquidacion?${new URLSearchParams(params).toString()}`, null),
+  liquidacionConfirmar: (userId, p) => llamar(userId, 'POST', '/liquidacion', p),
+  borrar: (userId, p) => llamar(userId, 'POST', '/delete', p),
   me: (userId) => llamar(userId, 'GET', '/me', null),
 };
