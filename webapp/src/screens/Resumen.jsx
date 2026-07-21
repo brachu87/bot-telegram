@@ -25,6 +25,7 @@ export default function Resumen() {
   const [periodo, setPeriodo] = useState('mes');
   const [resumen, setResumen] = useState(null);
   const [gastos, setGastos] = useState(null);
+  const [ingresos, setIngresos] = useState(null);
   const [mensual, setMensual] = useState(null);
   const [error, setError] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -51,12 +52,14 @@ export default function Resumen() {
     Promise.all([
       api.resumen(r.desde, r.hasta),
       api.gastos(r.desde, r.hasta),
+      api.ingresos(r.desde, r.hasta),
       api.gastosMensual(6)
     ])
-      .then(([res, gas, men]) => {
+      .then(([res, gas, ing, men]) => {
         if (!vivo) return;
         setResumen(res);
         setGastos(gas);
+        setIngresos(ing);
         setMensual(men);
       })
       .catch(e => vivo && setError(e.message))
@@ -68,8 +71,28 @@ export default function Resumen() {
   if (cargando || !resumen) return <div className="screen"><div className="loader">Cargando…</div></div>;
 
   const pieData = (gastos?.por_categoria || []).map(c => ({ name: c.categoria, value: c.total }));
+  const pieIngresos = (ingresos?.por_categoria || []).map(c => ({ name: c.categoria, value: c.total }));
+  const medioGastos = (gastos?.por_medio_pago || []).map(c => ({ name: c.medio_pago, value: c.total }));
   const barData = (mensual?.serie || []).map(s => ({ name: s.etiqueta, Gastos: s.gastos, Ingresos: s.ingresos }));
   const balance = resumen.balance;
+
+  const Torta = ({ titulo, data, vacio }) => (
+    <div className="card">
+      <div className="h2">{titulo}</div>
+      {(!data || data.length === 0) ? (
+        <div className="hint">{vacio}</div>
+      ) : (
+        <ResponsiveContainer width="100%" height={230}>
+          <PieChart>
+            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={(e) => e.name}>
+              {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+            </Pie>
+            <Tooltip formatter={(v) => fmtPesos(v)} />
+          </PieChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  );
 
   return (
     <div className="screen">
@@ -107,21 +130,9 @@ export default function Resumen() {
         </div>
       </div>
 
-      <div className="card">
-        <div className="h2">Gastos por categoría</div>
-        {pieData.length === 0 ? (
-          <div className="hint">Sin gastos en este período.</div>
-        ) : (
-          <ResponsiveContainer width="100%" height={230}>
-            <PieChart>
-              <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={(e) => e.name}>
-                {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-              </Pie>
-              <Tooltip formatter={(v) => fmtPesos(v)} />
-            </PieChart>
-          </ResponsiveContainer>
-        )}
-      </div>
+      <Torta titulo="Gastos por categoría" data={pieData} vacio="Sin gastos en este período." />
+      <Torta titulo="Ingresos por categoría" data={pieIngresos} vacio="Sin ingresos en este período." />
+      <Torta titulo="Gastos por medio de pago" data={medioGastos} vacio="Sin datos de medio de pago." />
 
       <div className="card">
         <div className="h2">Evolución (últimos 6 meses)</div>

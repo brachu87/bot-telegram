@@ -18,6 +18,17 @@ db.pragma('foreign_keys = ON');
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 
+// --- Migraciones: agregar columnas nuevas a bases que ya existen (sin perder datos) ---
+function agregarColumnaSiFalta(tabla, columna, definicion) {
+  const cols = db.prepare(`PRAGMA table_info(${tabla})`).all();
+  if (!cols.some(c => c.name === columna)) {
+    db.exec(`ALTER TABLE ${tabla} ADD COLUMN ${columna} ${definicion}`);
+  }
+}
+agregarColumnaSiFalta('gastos', 'medio_pago', 'TEXT');
+agregarColumnaSiFalta('ingresos', 'categoria', "TEXT NOT NULL DEFAULT 'otros'");
+agregarColumnaSiFalta('ingresos', 'medio_pago', 'TEXT');
+
 // Ruta absoluta del archivo de base (para backups)
 export const DB_FILE = path.resolve(DB_PATH);
 

@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS gastos (
   user_id     INTEGER NOT NULL,
   monto       REAL NOT NULL,
   categoria   TEXT NOT NULL DEFAULT 'otros',
+  medio_pago  TEXT,
   descripcion TEXT,
   fecha       TEXT NOT NULL,
   creado_en   TEXT NOT NULL DEFAULT (datetime('now'))
@@ -40,6 +41,8 @@ CREATE TABLE IF NOT EXISTS ingresos (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL,
   monto       REAL NOT NULL,
+  categoria   TEXT NOT NULL DEFAULT 'otros',
+  medio_pago  TEXT,
   descripcion TEXT,
   fecha       TEXT NOT NULL,
   creado_en   TEXT NOT NULL DEFAULT (datetime('now'))

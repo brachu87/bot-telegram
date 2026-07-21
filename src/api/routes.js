@@ -42,14 +42,38 @@ router.get('/gastos', (req, res) => {
   const uid = req.userId;
 
   const detalle = db.prepare(
-    'SELECT id, monto, categoria, descripcion, fecha FROM gastos WHERE user_id=? AND fecha>=? AND fecha<=? ORDER BY fecha DESC, id DESC'
+    'SELECT id, monto, categoria, medio_pago, descripcion, fecha FROM gastos WHERE user_id=? AND fecha>=? AND fecha<=? ORDER BY fecha DESC, id DESC'
   ).all(uid, desde, hasta);
   const porCategoria = db.prepare(
     'SELECT categoria, SUM(monto) AS total FROM gastos WHERE user_id=? AND fecha>=? AND fecha<=? GROUP BY categoria ORDER BY total DESC'
   ).all(uid, desde, hasta);
+  const porMedioPago = db.prepare(
+    "SELECT COALESCE(medio_pago,'sin especificar') AS medio_pago, SUM(monto) AS total FROM gastos WHERE user_id=? AND fecha>=? AND fecha<=? GROUP BY medio_pago ORDER BY total DESC"
+  ).all(uid, desde, hasta);
   const total = detalle.reduce((s, g) => s + g.monto, 0);
 
-  res.json({ desde, hasta, total, por_categoria: porCategoria, detalle });
+  res.json({ desde, hasta, total, por_categoria: porCategoria, por_medio_pago: porMedioPago, detalle });
+});
+
+// GET /api/ingresos?desde=&hasta=  -> detalle + agrupado por categoria y medio de pago
+router.get('/ingresos', (req, res) => {
+  const { desde: dMes, hasta: hMes } = rangoMesActual();
+  const desde = normalizarFecha(req.query.desde || dMes);
+  const hasta = normalizarFecha(req.query.hasta || hMes);
+  const uid = req.userId;
+
+  const detalle = db.prepare(
+    'SELECT id, monto, categoria, medio_pago, descripcion, fecha FROM ingresos WHERE user_id=? AND fecha>=? AND fecha<=? ORDER BY fecha DESC, id DESC'
+  ).all(uid, desde, hasta);
+  const porCategoria = db.prepare(
+    'SELECT categoria, SUM(monto) AS total FROM ingresos WHERE user_id=? AND fecha>=? AND fecha<=? GROUP BY categoria ORDER BY total DESC'
+  ).all(uid, desde, hasta);
+  const porMedioPago = db.prepare(
+    "SELECT COALESCE(medio_pago,'sin especificar') AS medio_pago, SUM(monto) AS total FROM ingresos WHERE user_id=? AND fecha>=? AND fecha<=? GROUP BY medio_pago ORDER BY total DESC"
+  ).all(uid, desde, hasta);
+  const total = detalle.reduce((s, g) => s + g.monto, 0);
+
+  res.json({ desde, hasta, total, por_categoria: porCategoria, por_medio_pago: porMedioPago, detalle });
 });
 
 // GET /api/gastos/mensual?meses=6  -> serie mensual gastos vs ingresos
@@ -144,17 +168,17 @@ router.get('/movimientos', (req, res) => {
   const uid = req.userId;
 
   const gastos = db.prepare(
-    'SELECT fecha, categoria, descripcion, monto FROM gastos WHERE user_id=? AND fecha>=? AND fecha<=?'
+    'SELECT fecha, categoria, medio_pago, descripcion, monto FROM gastos WHERE user_id=? AND fecha>=? AND fecha<=?'
   ).all(uid, desde, hasta).map(g => ({
     tipo: 'gasto', fecha: g.fecha, monto: g.monto,
-    detalle: g.descripcion || g.categoria, categoria: g.categoria
+    detalle: g.descripcion || g.categoria, categoria: g.categoria, medio_pago: g.medio_pago
   }));
 
   const ingresos = db.prepare(
-    'SELECT fecha, descripcion, monto FROM ingresos WHERE user_id=? AND fecha>=? AND fecha<=?'
+    'SELECT fecha, categoria, medio_pago, descripcion, monto FROM ingresos WHERE user_id=? AND fecha>=? AND fecha<=?'
   ).all(uid, desde, hasta).map(i => ({
     tipo: 'ingreso', fecha: i.fecha, monto: i.monto,
-    detalle: i.descripcion || 'Ingreso'
+    detalle: i.descripcion || 'Ingreso', categoria: i.categoria, medio_pago: i.medio_pago
   }));
 
   const movimientos = [...gastos, ...ingresos].sort((a, b) =>

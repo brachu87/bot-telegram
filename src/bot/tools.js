@@ -15,6 +15,7 @@ export const toolDefs = [
       properties: {
         monto: { type: 'number', description: 'Monto en pesos argentinos, ya convertido a numero (ej: 50000)' },
         categoria: { type: 'string', description: 'Categoria del gasto: comida, transporte, servicios, alquiler, sueldos, ocio, salud, otros, etc.' },
+        medio_pago: { type: 'string', description: 'Como se pago: efectivo, tarjeta, debito, credito, transferencia, mercadopago, etc. Solo si el usuario lo aclara; sino omitir.' },
         descripcion: { type: 'string', description: 'Breve descripcion de en que fue el gasto' },
         fecha: { type: 'string', description: 'Fecha del gasto en formato YYYY-MM-DD. Omitir si es hoy.' }
       },
@@ -28,6 +29,8 @@ export const toolDefs = [
       type: 'object',
       properties: {
         monto: { type: 'number', description: 'Monto en pesos, numero' },
+        categoria: { type: 'string', description: 'Categoria del ingreso: ventas, sueldo, honorarios, alquileres, reintegros, otros, etc.' },
+        medio_pago: { type: 'string', description: 'Como lo cobro: efectivo, transferencia, mercadopago, cheque, tarjeta, etc. Solo si el usuario lo aclara; sino omitir.' },
         descripcion: { type: 'string', description: 'De donde viene el ingreso' },
         fecha: { type: 'string', description: 'YYYY-MM-DD. Omitir si es hoy.' }
       },
@@ -128,7 +131,8 @@ export const toolDefs = [
         tipo: { type: 'string', enum: ['gasto', 'ingreso'], description: 'Que corregir (default gasto).' },
         monto: { type: 'number', description: 'Nuevo monto en pesos (numero). Opcional.' },
         descripcion: { type: 'string', description: 'Nueva descripcion. Opcional.' },
-        categoria: { type: 'string', description: 'Nueva categoria (solo para gasto). Opcional.' }
+        categoria: { type: 'string', description: 'Nueva categoria. Opcional.' },
+        medio_pago: { type: 'string', description: 'Nuevo medio de pago. Opcional.' }
       }
     }
   },
@@ -247,17 +251,17 @@ export function ejecutarTool(nombre, input, ctx) {
     case 'registrar_gasto': {
       const fecha = normalizarFecha(input.fecha);
       const info = db.prepare(
-        'INSERT INTO gastos (user_id, monto, categoria, descripcion, fecha) VALUES (?, ?, ?, ?, ?)'
-      ).run(userId, input.monto, input.categoria || 'otros', input.descripcion || null, fecha);
-      return { ok: true, id: info.lastInsertRowid, monto: input.monto, categoria: input.categoria || 'otros', descripcion: input.descripcion || null, fecha };
+        'INSERT INTO gastos (user_id, monto, categoria, medio_pago, descripcion, fecha) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(userId, input.monto, input.categoria || 'otros', input.medio_pago || null, input.descripcion || null, fecha);
+      return { ok: true, id: info.lastInsertRowid, monto: input.monto, categoria: input.categoria || 'otros', medio_pago: input.medio_pago || null, descripcion: input.descripcion || null, fecha };
     }
 
     case 'registrar_ingreso': {
       const fecha = normalizarFecha(input.fecha);
       const info = db.prepare(
-        'INSERT INTO ingresos (user_id, monto, descripcion, fecha) VALUES (?, ?, ?, ?)'
-      ).run(userId, input.monto, input.descripcion || null, fecha);
-      return { ok: true, id: info.lastInsertRowid, monto: input.monto, descripcion: input.descripcion || null, fecha };
+        'INSERT INTO ingresos (user_id, monto, categoria, medio_pago, descripcion, fecha) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(userId, input.monto, input.categoria || 'otros', input.medio_pago || null, input.descripcion || null, fecha);
+      return { ok: true, id: info.lastInsertRowid, monto: input.monto, categoria: input.categoria || 'otros', medio_pago: input.medio_pago || null, descripcion: input.descripcion || null, fecha };
     }
 
     case 'registrar_deuda': {
@@ -296,12 +300,15 @@ export function ejecutarTool(nombre, input, ctx) {
       const where = cond.join(' AND ');
       const total = db.prepare(`SELECT COALESCE(SUM(monto),0) AS t FROM gastos WHERE ${where}`).get(...args).t;
       const detalle = db.prepare(
-        `SELECT id, monto, categoria, descripcion, fecha FROM gastos WHERE ${where} ORDER BY fecha DESC, id DESC LIMIT 50`
+        `SELECT id, monto, categoria, medio_pago, descripcion, fecha FROM gastos WHERE ${where} ORDER BY fecha DESC, id DESC LIMIT 50`
       ).all(...args);
       const porCategoria = db.prepare(
         `SELECT categoria, SUM(monto) AS total FROM gastos WHERE ${where} GROUP BY categoria ORDER BY total DESC`
       ).all(...args);
-      return { ok: true, total, total_texto: fmtPesos(total), cantidad: detalle.length, por_categoria: porCategoria, detalle };
+      const porMedio = db.prepare(
+        `SELECT COALESCE(medio_pago,'sin especificar') AS medio_pago, SUM(monto) AS total FROM gastos WHERE ${where} GROUP BY medio_pago ORDER BY total DESC`
+      ).all(...args);
+      return { ok: true, total, total_texto: fmtPesos(total), cantidad: detalle.length, por_categoria: porCategoria, por_medio_pago: porMedio, detalle };
     }
 
     case 'listar_personas': {
@@ -321,9 +328,15 @@ export function ejecutarTool(nombre, input, ctx) {
       const where = cond.join(' AND ');
       const total = db.prepare(`SELECT COALESCE(SUM(monto),0) AS t FROM ingresos WHERE ${where}`).get(...args).t;
       const detalle = db.prepare(
-        `SELECT id, monto, descripcion, fecha FROM ingresos WHERE ${where} ORDER BY fecha DESC, id DESC LIMIT 50`
+        `SELECT id, monto, categoria, medio_pago, descripcion, fecha FROM ingresos WHERE ${where} ORDER BY fecha DESC, id DESC LIMIT 50`
       ).all(...args);
-      return { ok: true, total, total_texto: fmtPesos(total), cantidad: detalle.length, detalle };
+      const porCategoria = db.prepare(
+        `SELECT categoria, SUM(monto) AS total FROM ingresos WHERE ${where} GROUP BY categoria ORDER BY total DESC`
+      ).all(...args);
+      const porMedio = db.prepare(
+        `SELECT COALESCE(medio_pago,'sin especificar') AS medio_pago, SUM(monto) AS total FROM ingresos WHERE ${where} GROUP BY medio_pago ORDER BY total DESC`
+      ).all(...args);
+      return { ok: true, total, total_texto: fmtPesos(total), cantidad: detalle.length, por_categoria: porCategoria, por_medio_pago: porMedio, detalle };
     }
 
     case 'consultar_balance': {
@@ -370,12 +383,13 @@ export function ejecutarTool(nombre, input, ctx) {
       const args = [];
       if (input.monto != null) { sets.push('monto = ?'); args.push(input.monto); }
       if (input.descripcion != null) { sets.push('descripcion = ?'); args.push(input.descripcion); }
-      if (tipo === 'gasto' && input.categoria != null) { sets.push('categoria = ?'); args.push(input.categoria); }
-      if (sets.length === 0) return { ok: false, error: 'No indicaste que corregir (monto, descripcion o categoria).' };
+      if (input.categoria != null) { sets.push('categoria = ?'); args.push(input.categoria); }
+      if (input.medio_pago != null) { sets.push('medio_pago = ?'); args.push(input.medio_pago); }
+      if (sets.length === 0) return { ok: false, error: 'No indicaste que corregir (monto, descripcion, categoria o medio de pago).' };
       args.push(row.id);
       db.prepare(`UPDATE ${tabla} SET ${sets.join(', ')} WHERE id = ?`).run(...args);
       const nuevo = db.prepare(`SELECT * FROM ${tabla} WHERE id = ?`).get(row.id);
-      return { ok: true, tipo, monto: nuevo.monto, monto_texto: fmtPesos(nuevo.monto), categoria: nuevo.categoria, descripcion: nuevo.descripcion, fecha: nuevo.fecha };
+      return { ok: true, tipo, monto: nuevo.monto, monto_texto: fmtPesos(nuevo.monto), categoria: nuevo.categoria, medio_pago: nuevo.medio_pago, descripcion: nuevo.descripcion, fecha: nuevo.fecha };
     }
 
     case 'crear_recordatorio': {

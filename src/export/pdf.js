@@ -59,13 +59,13 @@ export function generarPDF(userId, desde, hasta, opciones = {}) {
     // Gastos (detalle)
     if (inc.gastos && d.gastos.length) {
       h1('Gastos (detalle)');
-      d.gastos.forEach(g => linea(`${g.fecha}  [${g.categoria}] ${g.descripcion || ''} — ${fmtPesos(g.monto)}`));
+      d.gastos.forEach(g => linea(`${g.fecha}  [${g.categoria}]${g.medio_pago ? ' (' + g.medio_pago + ')' : ''} ${g.descripcion || ''} — ${fmtPesos(g.monto)}`));
     }
 
     // Ingresos
     if (inc.ingresos && d.ingresos.length) {
       h1('Ingresos');
-      d.ingresos.forEach(g => linea(`${g.fecha}  ${g.descripcion || ''} — ${fmtPesos(g.monto)}`));
+      d.ingresos.forEach(g => linea(`${g.fecha}  [${g.categoria}]${g.medio_pago ? ' (' + g.medio_pago + ')' : ''} ${g.descripcion || ''} — ${fmtPesos(g.monto)}`));
     }
 
     // Notas

@@ -37,23 +37,23 @@ export async function generarExcel(userId, desde, hasta, opciones = {}) {
   // --- Gastos ---
   if (inc.gastos) {
     const wsG = wb.addWorksheet('Gastos');
-    const hG = wsG.addRow(['Fecha', 'Categoría', 'Descripción', 'Monto']); encabezado(hG);
+    const hG = wsG.addRow(['Fecha', 'Categoría', 'Medio de pago', 'Descripción', 'Monto']); encabezado(hG);
     d.gastos.forEach(g => {
-      const r = wsG.addRow([g.fecha, g.categoria, g.descripcion || '', g.monto]);
-      r.getCell(4).numFmt = MONEY;
+      const r = wsG.addRow([g.fecha, g.categoria, g.medio_pago || '', g.descripcion || '', g.monto]);
+      r.getCell(5).numFmt = MONEY;
     });
-    wsG.columns.forEach((c, i) => c.width = [14, 18, 34, 14][i]);
+    wsG.columns.forEach((c, i) => c.width = [14, 18, 16, 30, 14][i]);
   }
 
   // --- Ingresos ---
   if (inc.ingresos) {
     const wsI = wb.addWorksheet('Ingresos');
-    const hI = wsI.addRow(['Fecha', 'Descripción', 'Monto']); encabezado(hI);
+    const hI = wsI.addRow(['Fecha', 'Categoría', 'Medio de pago', 'Descripción', 'Monto']); encabezado(hI);
     d.ingresos.forEach(g => {
-      const r = wsI.addRow([g.fecha, g.descripcion || '', g.monto]);
-      r.getCell(3).numFmt = MONEY;
+      const r = wsI.addRow([g.fecha, g.categoria, g.medio_pago || '', g.descripcion || '', g.monto]);
+      r.getCell(5).numFmt = MONEY;
     });
-    wsI.columns.forEach((c, i) => c.width = [14, 40, 14][i]);
+    wsI.columns.forEach((c, i) => c.width = [14, 18, 16, 30, 14][i]);
   }
 
   // --- Personas y deudas ---

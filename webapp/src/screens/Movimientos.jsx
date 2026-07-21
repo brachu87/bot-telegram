@@ -66,7 +66,9 @@ export default function Movimientos() {
                 <div key={i} className="row">
                   <div>
                     <div className="row-title">{m.detalle}</div>
-                    <div className="row-sub">{m.fecha}{m.categoria ? ` · ${m.categoria}` : ''}</div>
+                    <div className="row-sub">
+                      {m.fecha}{m.categoria ? ` · ${m.categoria}` : ''}{m.medio_pago ? ` · ${m.medio_pago}` : ''}
+                    </div>
                   </div>
                   <div className={'badge ' + (m.tipo === 'ingreso' ? 'pos' : 'neg')}>
                     {m.tipo === 'ingreso' ? '+' : '−'}{fmtPesos(m.monto)}

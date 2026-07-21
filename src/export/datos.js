@@ -24,11 +24,11 @@ export function reunirDatos(userId, desde, hasta, opciones = {}) {
   const dHigh = hasta || '9999-12-31';
 
   const gastos = db.prepare(
-    'SELECT fecha, categoria, descripcion, monto FROM gastos WHERE user_id=? AND fecha>=? AND fecha<=? ORDER BY fecha DESC, id DESC'
+    'SELECT fecha, categoria, medio_pago, descripcion, monto FROM gastos WHERE user_id=? AND fecha>=? AND fecha<=? ORDER BY fecha DESC, id DESC'
   ).all(userId, dLow, dHigh);
 
   const ingresos = db.prepare(
-    'SELECT fecha, descripcion, monto FROM ingresos WHERE user_id=? AND fecha>=? AND fecha<=? ORDER BY fecha DESC, id DESC'
+    'SELECT fecha, categoria, medio_pago, descripcion, monto FROM ingresos WHERE user_id=? AND fecha>=? AND fecha<=? ORDER BY fecha DESC, id DESC'
   ).all(userId, dLow, dHigh);
 
   const porCategoria = db.prepare(

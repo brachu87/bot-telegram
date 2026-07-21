@@ -17,6 +17,7 @@ async function get(path) {
 export const api = {
   resumen: (desde, hasta) => get(`/resumen${qs({ desde, hasta })}`),
   gastos: (desde, hasta) => get(`/gastos${qs({ desde, hasta })}`),
+  ingresos: (desde, hasta) => get(`/ingresos${qs({ desde, hasta })}`),
   gastosMensual: (meses = 6) => get(`/gastos/mensual${qs({ meses })}`),
   personas: () => get('/personas'),
   recordatorios: (desde, hasta) => get(`/recordatorios${qs({ desde, hasta })}`),
