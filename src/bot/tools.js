@@ -1,6 +1,7 @@
 import db from '../db/index.js';
 import { normalizarFecha, localAUTC, utcALegible } from '../util/dates.js';
 import { fmtPesos } from '../util/money.js';
+import { gestumio, estaVinculado } from '../gestumio/api.js';
 
 // ---------------------------------------------------------------------------
 // Definiciones de tools (formato Anthropic tool use)
@@ -209,7 +210,67 @@ export const toolDefs = [
       },
       required: ['formato']
     }
-  }
+  },
+
+  // --- GESTUMIO (CRM del negocio) ---
+  {
+    name: 'gestumio_cargar_gasto',
+    description: 'Carga un GASTO/compra del NEGOCIO en Gestumio (el CRM). Usar cuando el usuario quiere registrar un gasto del negocio, o manda la foto/PDF de una factura de compra. Si manda una imagen de factura, extraé monto, categoria y descripcion de la imagen.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        monto: { type: 'number', description: 'Monto total en pesos, numero' },
+        categoria: { type: 'string', description: 'Categoria del gasto (ej: mercaderia, servicios, alquiler, sueldos, impuestos, otros)' },
+        descripcion: { type: 'string', description: 'Descripcion o proveedor del gasto' },
+        medio_pago: { type: 'string', description: 'efectivo, transferencia, tarjeta, debito, credito, mercadopago. Solo si se aclara.' },
+        fecha: { type: 'string', description: 'YYYY-MM-DD. Omitir si es hoy.' }
+      },
+      required: ['monto', 'categoria']
+    }
+  },
+  {
+    name: 'gestumio_registrar_cobro',
+    description: 'Registra un COBRO/ingreso del NEGOCIO en Gestumio (plata que entra). Opcionalmente asociado a un cliente por su nombre.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        monto: { type: 'number', description: 'Monto cobrado en pesos, numero' },
+        descripcion: { type: 'string', description: 'Concepto del cobro (ej: cuota de julio, corte de pelo)' },
+        cliente: { type: 'string', description: 'Nombre del cliente, si corresponde. Se busca en el negocio.' },
+        medio_pago: { type: 'string', description: 'efectivo, transferencia, mercadopago, tarjeta, etc. Solo si se aclara.' },
+        fecha: { type: 'string', description: 'YYYY-MM-DD. Omitir si es hoy.' }
+      },
+      required: ['monto', 'descripcion']
+    }
+  },
+  {
+    name: 'gestumio_crear_cliente',
+    description: 'Da de alta un CLIENTE nuevo en el negocio en Gestumio.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre: { type: 'string', description: 'Nombre y apellido del cliente' },
+        telefono: { type: 'string' },
+        email: { type: 'string' },
+        dni: { type: 'string' },
+        cuit: { type: 'string' },
+        notas: { type: 'string' }
+      },
+      required: ['nombre']
+    }
+  },
+  {
+    name: 'gestumio_consultar',
+    description: 'Consulta datos del NEGOCIO en Gestumio. tipo="resumen" (ingresos/gastos/por cobrar del mes), tipo="deuda" (cuanto debe un cliente, requiere cliente), tipo="turnos" (turnos de hoy).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', enum: ['resumen', 'deuda', 'turnos'], description: 'Que consultar' },
+        cliente: { type: 'string', description: 'Nombre del cliente (solo para tipo=deuda)' }
+      },
+      required: ['tipo']
+    }
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -245,7 +306,7 @@ function saldoPersona(userId, personaId) {
 // ---------------------------------------------------------------------------
 // Ejecucion de tools. ctx = { userId, chatId }
 // ---------------------------------------------------------------------------
-export function ejecutarTool(nombre, input, ctx) {
+export async function ejecutarTool(nombre, input, ctx) {
   const { userId, chatId } = ctx;
   switch (nombre) {
     case 'registrar_gasto': {
@@ -444,6 +505,30 @@ export function ejecutarTool(nombre, input, ctx) {
       // Registramos el pedido; el bot genera y envia el archivo despues de responder.
       if (Array.isArray(ctx.archivos)) ctx.archivos.push(pedido);
       return { ok: true, ...pedido, nota: 'El archivo se envía a continuación.' };
+    }
+
+    // --- GESTUMIO ---
+    case 'gestumio_cargar_gasto': {
+      if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular con el codigo de Ajustes.' };
+      const r = await gestumio.cargarGasto(userId, { amount: input.monto, category: input.categoria, description: input.descripcion, paymentMethod: input.medio_pago, date: input.fecha });
+      return r.ok ? { ok: true, ...r.data } : { ok: false, error: r.error };
+    }
+    case 'gestumio_registrar_cobro': {
+      if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular con el codigo de Ajustes.' };
+      const r = await gestumio.registrarCobro(userId, { amount: input.monto, description: input.descripcion, clientName: input.cliente, date: input.fecha });
+      return r.ok ? { ok: true, ...r.data } : { ok: false, error: r.error };
+    }
+    case 'gestumio_crear_cliente': {
+      if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular con el codigo de Ajustes.' };
+      const r = await gestumio.crearCliente(userId, { name: input.nombre, phone: input.telefono, email: input.email, dni: input.dni, cuit: input.cuit, notes: input.notas });
+      return r.ok ? { ok: true, ...r.data } : { ok: false, error: r.error };
+    }
+    case 'gestumio_consultar': {
+      if (!estaVinculado(userId)) return { ok: false, error: 'No estas vinculado a Gestumio. Deci al usuario que use /vincular con el codigo de Ajustes.' };
+      const params = { type: input.tipo };
+      if (input.cliente) params.name = input.cliente;
+      const r = await gestumio.consultar(userId, params);
+      return r.ok ? { ok: true, ...r.data } : { ok: false, error: r.error };
     }
 
     default:

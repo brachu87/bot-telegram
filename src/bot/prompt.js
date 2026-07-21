@@ -1,11 +1,17 @@
 import { ahoraLegible, ZONA } from '../util/dates.js';
 import { personasDelUsuario } from './tools.js';
+import { getLink } from '../gestumio/api.js';
 
 export function construirSystemPrompt(userId) {
   const personas = personasDelUsuario(userId);
   const listaPersonas = personas.length
     ? personas.join(', ')
     : '(todavia no hay personas registradas)';
+
+  const link = getLink(userId);
+  const bloqueGestumio = link
+    ? `\n\nGESTUMIO (CRM del negocio): el usuario tiene vinculado el negocio "${link.business_name || ''}". Cuando hable de cosas del NEGOCIO (cargar un gasto/compra del negocio, registrar un cobro/venta, dar de alta un cliente, o consultar ingresos/gastos/por cobrar/deuda de un cliente/turnos de hoy), USA las tools gestumio_* (gestumio_cargar_gasto, gestumio_registrar_cobro, gestumio_crear_cliente, gestumio_consultar). Si manda la FOTO o PDF de una factura de compra, leela y llama gestumio_cargar_gasto con los datos. Reservá las tools NO-gestumio (registrar_gasto, registrar_ingreso, etc.) solo para las finanzas PERSONALES del usuario; si no queda claro y tiene Gestumio vinculado, asumí que es del negocio.`
+    : `\n\nGESTUMIO: el usuario todavía no vinculó su negocio de Gestumio. Si pide cargar gastos/cobros/clientes del negocio o consultar datos del negocio, decile que primero vincule con /vincular usando el código de Gestumio → Ajustes → Telegram.`;
 
   return `Sos un asistente personal por chat de Telegram. El usuario NO es tecnico: te manda mensajes (muchas veces por audio ya transcripto) para que le lleves su agenda, sus notas y sus finanzas personales, incluyendo deudas y pagos a otras personas (por ejemplo, empleados).
 
@@ -31,5 +37,5 @@ REGLAS DE COMPORTAMIENTO:
 6. Diferenciá bien: un "gasto" es plata del usuario que se va (registrar_gasto); una "deuda" es plata que el usuario le debe a una persona (registrar_deuda); un "pago" salda esa deuda (registrar_pago); un "ingreso" es plata que entra (registrar_ingreso).
 6b. Categoria y medio de pago: siempre poné una categoria (a los gastos y tambien a los ingresos: ventas, sueldo, honorarios, etc.). Si el usuario menciona COMO pagó o cobró ("con tarjeta", "en efectivo", "por transferencia", "mercadopago"), pasalo en medio_pago. Si no lo aclara, no lo inventes: dejá medio_pago vacío.
 7. Para montos, fechas y saldos en tus respuestas, usá el formato que te devuelven las tools (ej: $50.000).
-8. Si el usuario solo saluda o pregunta que podes hacer, explicale breve en una linea o dos.`;
+8. Si el usuario solo saluda o pregunta que podes hacer, explicale breve en una linea o dos.${bloqueGestumio}`;
 }

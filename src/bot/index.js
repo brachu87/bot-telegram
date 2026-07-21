@@ -7,6 +7,7 @@ import { chequearLimite } from '../util/usage.js';
 import { generarExcel } from '../export/excel.js';
 import { generarPDF } from '../export/pdf.js';
 import { fmtPesos } from '../util/money.js';
+import { vincular, desvincular, getLink } from '../gestumio/api.js';
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
   throw new Error('Falta TELEGRAM_BOT_TOKEN en el .env');
@@ -46,6 +47,34 @@ bot.command('start', async (ctx) => {
     'Tocá el botón 📊 para ver tu resumen con gráficos.\n' +
     'Escribí /excel o /pdf para descargar tus datos.'
   );
+});
+
+// --- /vincular CODIGO: conecta este Telegram con una cuenta de Gestumio ---
+bot.command('vincular', async (ctx) => {
+  const code = (ctx.match || '').trim();
+  if (!code) {
+    await ctx.reply('Para vincular tu cuenta de Gestumio:\n1) Entrá a Gestumio → Ajustes → 🤖 Telegram\n2) Tocá "Generar código de vinculación"\n3) Enviame acá: /vincular TUCODIGO');
+    return;
+  }
+  try {
+    const info = await vincular(ctx.from.id, code, ctx.from.first_name || ctx.from.username || null);
+    await ctx.reply(`✅ ¡Vinculado! Ahora puedo cargar datos en *${info.businessName}* como *${info.userName}*.\n\nProbá: "cargá un gasto de 30 mil en nafta", mandame la foto de una factura, "¿cuánto me debe Juan?" o "¿cómo viene el mes?".`, { parse_mode: 'Markdown' });
+  } catch (e) {
+    await ctx.reply('❌ ' + (e.message || 'No se pudo vincular') + '\n\nGenerá un código nuevo en Gestumio → Ajustes → Telegram e intentá de nuevo.');
+  }
+});
+
+// --- /desvincular: corta la conexión con Gestumio ---
+bot.command('desvincular', async (ctx) => {
+  const ok = desvincular(ctx.from.id);
+  await ctx.reply(ok ? '🔌 Listo, desvinculé tu cuenta de Gestumio.' : 'No tenías ninguna cuenta de Gestumio vinculada.');
+});
+
+// --- /gestumio: estado de la vinculación ---
+bot.command('gestumio', async (ctx) => {
+  const l = getLink(ctx.from.id);
+  if (!l) { await ctx.reply('No estás vinculado a Gestumio. Usá /vincular CODIGO para conectar tu cuenta.'); return; }
+  await ctx.reply(`🤖 Vinculado a *${l.business_name || '—'}* como *${l.user_name || '—'}*.`, { parse_mode: 'Markdown' });
 });
 
 // --- /ayuda: explica que puede hacer el bot, con ejemplos ---

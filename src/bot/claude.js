@@ -62,7 +62,7 @@ async function correrLoop(userId, chatId, messages, textoParaHistorial) {
         if (block.type === 'tool_use') {
           let resultado;
           try {
-            resultado = ejecutarTool(block.name, block.input || {}, { userId, chatId, archivos });
+            resultado = await ejecutarTool(block.name, block.input || {}, { userId, chatId, archivos });
           } catch (err) {
             resultado = { ok: false, error: String(err.message || err) };
           }

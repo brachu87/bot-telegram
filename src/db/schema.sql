@@ -80,3 +80,13 @@ CREATE INDEX IF NOT EXISTS idx_gastos_fecha     ON gastos (user_id, fecha);
 CREATE INDEX IF NOT EXISTS idx_ingresos_fecha   ON ingresos (user_id, fecha);
 CREATE INDEX IF NOT EXISTS idx_recordatorios    ON recordatorios (enviado, fecha_hora);
 CREATE INDEX IF NOT EXISTS idx_historial        ON historial_chat (user_id, chat_id, id);
+
+-- Vinculación con Gestumio (un token por usuario de Telegram)
+CREATE TABLE IF NOT EXISTS gestumio_link (
+  user_id       INTEGER PRIMARY KEY,
+  token         TEXT NOT NULL,
+  business_name TEXT,
+  user_name     TEXT,
+  role          TEXT,
+  vinculado_en  TEXT NOT NULL DEFAULT (datetime('now'))
+);
