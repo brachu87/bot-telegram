@@ -1,10 +1,12 @@
 import { Bot, InputFile } from 'grammy';
+import db from '../db/index.js';
 import { procesarMensaje } from './claude.js';
 import { transcribir } from './transcribe.js';
 import { estaAutorizado, esAdmin, agregarCliente, quitarCliente, listarClientes } from '../util/access.js';
 import { chequearLimite } from '../util/usage.js';
 import { generarExcel } from '../export/excel.js';
 import { generarPDF } from '../export/pdf.js';
+import { fmtPesos } from '../util/money.js';
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
   throw new Error('Falta TELEGRAM_BOT_TOKEN en el .env');
@@ -44,6 +46,34 @@ bot.command('start', async (ctx) => {
     'Tocá el botón 📊 para ver tu resumen con gráficos.\n' +
     'Escribí /excel o /pdf para descargar tus datos.'
   );
+});
+
+// --- /debug: diagnostico. Muestra lo que hay realmente en la base para este usuario ---
+bot.command('debug', async (ctx) => {
+  try {
+    const uid = ctx.from.id;
+    const ing = db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(monto),0) AS s FROM ingresos WHERE user_id=?').get(uid);
+    const gas = db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(monto),0) AS s FROM gastos WHERE user_id=?').get(uid);
+    const ultIng = db.prepare('SELECT monto, descripcion, fecha, creado_en FROM ingresos WHERE user_id=? ORDER BY id DESC LIMIT 3').all(uid);
+    const totalIngTodos = db.prepare('SELECT COUNT(*) AS n FROM ingresos').get().n;
+
+    let txt = `🔎 Diagnóstico\n`;
+    txt += `Tu user_id: ${uid}\n`;
+    txt += `Base: ${process.env.DB_PATH || './data/asistente.db'}\n\n`;
+    txt += `Ingresos tuyos: ${ing.n} (total ${fmtPesos(ing.s)})\n`;
+    txt += `Gastos tuyos: ${gas.n} (total ${fmtPesos(gas.s)})\n`;
+    txt += `Ingresos de TODOS los usuarios: ${totalIngTodos}\n\n`;
+    if (ultIng.length) {
+      txt += `Últimos ingresos:\n`;
+      ultIng.forEach(i => { txt += `• ${fmtPesos(i.monto)} — ${i.descripcion || 's/desc'} — fecha ${i.fecha} (guardado ${i.creado_en})\n`; });
+    } else {
+      txt += `No hay ingresos guardados para tu usuario en ESTA base.`;
+    }
+    await ctx.reply(txt);
+  } catch (err) {
+    console.error('Error /debug:', err);
+    await ctx.reply('No pude leer el diagnóstico: ' + err.message);
+  }
 });
 
 // --- Comandos de administrador (solo para los ADMIN_IDS): gestionar clientes ---
