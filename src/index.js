@@ -2,6 +2,8 @@ import 'dotenv/config';
 import { bot } from './bot/index.js';
 import { crearApp } from './api/index.js';
 import { iniciarCronRecordatorios } from './cron/reminders.js';
+import { iniciarCronResumen } from './cron/resumen.js';
+import { iniciarCronBackup } from './cron/backup.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -19,8 +21,10 @@ async function main() {
   const app = crearApp();
   app.listen(PORT, () => console.log(`🌐 API + Mini App en http://localhost:${PORT}`));
 
-  // 2) Cron de recordatorios
+  // 2) Crons: recordatorios, resumen automático y backups
   iniciarCronRecordatorios(bot);
+  iniciarCronResumen(bot);
+  iniciarCronBackup(bot);
 
   // 3) Configurar el boton de menu de la Mini App (si hay URL publica)
   if (process.env.WEBAPP_URL) {

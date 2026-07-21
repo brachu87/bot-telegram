@@ -1,6 +1,6 @@
 import { Bot, InputFile } from 'grammy';
 import db from '../db/index.js';
-import { procesarMensaje } from './claude.js';
+import { procesarMensaje, procesarImagen } from './claude.js';
 import { transcribir } from './transcribe.js';
 import { estaAutorizado, esAdmin, agregarCliente, quitarCliente, listarClientes } from '../util/access.js';
 import { chequearLimite } from '../util/usage.js';
@@ -45,6 +45,30 @@ bot.command('start', async (ctx) => {
     '"recordame mañana a las 9 llamar al contador".\n\n' +
     'Tocá el botón 📊 para ver tu resumen con gráficos.\n' +
     'Escribí /excel o /pdf para descargar tus datos.'
+  );
+});
+
+// --- /ayuda: explica que puede hacer el bot, con ejemplos ---
+bot.command('ayuda', async (ctx) => {
+  await ctx.reply(
+    '¿Qué puedo hacer? Escribime o mandame un audio 🎤\n\n' +
+    '💸 Gastos e ingresos\n' +
+    '• "gasté 15 lucas en el súper"\n' +
+    '• "cobré 300 mil de una venta"\n' +
+    '• Mandame la 📷 foto de un ticket y lo cargo solo\n\n' +
+    '🧾 Deudas y pagos\n' +
+    '• "le debo 50 lucas a Juan por el sábado"\n' +
+    '• "le pagué 20 lucas a Juan"\n' +
+    '• "¿cuánto le debo a Juan?"\n\n' +
+    '↩️ Corregir\n' +
+    '• "borrá el último gasto"\n' +
+    '• "corregí, eran 5 lucas no 50"\n\n' +
+    '⏰ Recordatorios y notas\n' +
+    '• "recordame mañana a las 9 llamar al contador"\n' +
+    '• "anotá que la clave del wifi es 1234"\n\n' +
+    '📊 Reportes\n' +
+    '• Botón 📊 para ver gráficos\n' +
+    '• "pasame el excel de este mes" · /excel · /pdf'
   );
 });
 
@@ -214,6 +238,35 @@ bot.on(['message:voice', 'message:audio'], async (ctx) => {
   } catch (err) {
     console.error('Error manejando audio:', err);
     await ctx.reply('Se me complicó procesar eso 😕 Probá de nuevo en un ratito.');
+  }
+});
+
+// --- Fotos (tickets / facturas): las lee con vision y registra el gasto ---
+bot.on('message:photo', async (ctx) => {
+  try {
+    const userId = ctx.from.id;
+    const chatId = ctx.chat.id;
+
+    const limite = chequearLimite(userId);
+    if (!limite.permitido) {
+      await ctx.reply(`Llegaste al máximo de mensajes por hoy (${limite.limite}). Seguimos mañana 🙂`);
+      return;
+    }
+
+    // La ultima foto del array es la de mayor resolucion
+    const foto = ctx.message.photo[ctx.message.photo.length - 1];
+    const { buffer } = await descargarArchivo(ctx, foto.file_id);
+    const base64 = buffer.toString('base64');
+
+    await ctx.replyWithChatAction('typing').catch(() => {});
+    const { texto, archivos } = await procesarImagen(userId, chatId, base64, 'image/jpeg', ctx.message.caption || '');
+    await ctx.reply(texto);
+    for (const pedido of archivos || []) {
+      try { await enviarReporte(ctx, pedido); } catch (err) { console.error('Error enviando reporte:', err); }
+    }
+  } catch (err) {
+    console.error('Error manejando foto:', err);
+    await ctx.reply('No pude leer la foto 🙈 Probá con una más nítida, o escribime el gasto.');
   }
 });
 

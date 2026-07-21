@@ -66,3 +66,12 @@ export function estaAutorizado(userId) {
   if (idsPermitidosEnv().has(id)) return true;   // IDs fijos por env
   return hayCliente(userId);                      // clientes de la base
 }
+
+// Todos los user_id autorizados (admins + env + clientes de la base), como numeros.
+export function usuariosAutorizados() {
+  const ids = new Set();
+  for (const s of idsAdmin()) ids.add(Number(s));
+  for (const s of idsPermitidosEnv()) ids.add(Number(s));
+  for (const c of listarClientes()) ids.add(Number(c.user_id));
+  return [...ids].filter(n => Number.isFinite(n));
+}

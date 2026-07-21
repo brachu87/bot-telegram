@@ -87,6 +87,51 @@ export const toolDefs = [
     description: 'Lista todas las personas registradas con su saldo pendiente actual.',
     input_schema: { type: 'object', properties: {} }
   },
+  {
+    name: 'consultar_ingresos',
+    description: 'Consulta ingresos en un rango de fechas. Devuelve total y detalle. Usar para "cuanto cobre/facture/ingrese".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        desde: { type: 'string', description: 'YYYY-MM-DD (inclusive)' },
+        hasta: { type: 'string', description: 'YYYY-MM-DD (inclusive)' }
+      }
+    }
+  },
+  {
+    name: 'consultar_balance',
+    description: 'Devuelve ingresos, gastos y balance (ingresos - gastos) de un periodo. Usar para "como vengo", "cuanto me queda", "balance del mes".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        desde: { type: 'string', description: 'YYYY-MM-DD (inclusive)' },
+        hasta: { type: 'string', description: 'YYYY-MM-DD (inclusive)' }
+      }
+    }
+  },
+  {
+    name: 'borrar_ultimo',
+    description: 'Borra el ultimo movimiento cargado. Usar para "borra eso", "borra el ultimo gasto", "deshace lo ultimo", "eliminá el ingreso que acabo de cargar".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', enum: ['ultimo', 'gasto', 'ingreso', 'nota', 'recordatorio'], description: 'Que borrar. "ultimo" (default) = el ultimo gasto o ingreso, el que sea mas reciente.' }
+      }
+    }
+  },
+  {
+    name: 'corregir_ultimo',
+    description: 'Corrige el ultimo gasto o ingreso cargado (por ejemplo si se transcribio mal el monto). Usar para "corregi, eran 5 lucas no 50", "cambiá la categoria del ultimo gasto".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', enum: ['gasto', 'ingreso'], description: 'Que corregir (default gasto).' },
+        monto: { type: 'number', description: 'Nuevo monto en pesos (numero). Opcional.' },
+        descripcion: { type: 'string', description: 'Nueva descripcion. Opcional.' },
+        categoria: { type: 'string', description: 'Nueva categoria (solo para gasto). Opcional.' }
+      }
+    }
+  },
 
   // --- Agenda y recordatorios ---
   {
@@ -266,6 +311,71 @@ export function ejecutarTool(nombre, input, ctx) {
         return { id: p.id, nombre: p.nombre, saldo, saldo_texto: fmtPesos(saldo) };
       });
       return { ok: true, personas: salida };
+    }
+
+    case 'consultar_ingresos': {
+      const cond = ['user_id = ?'];
+      const args = [userId];
+      if (input.desde) { cond.push('fecha >= ?'); args.push(normalizarFecha(input.desde)); }
+      if (input.hasta) { cond.push('fecha <= ?'); args.push(normalizarFecha(input.hasta)); }
+      const where = cond.join(' AND ');
+      const total = db.prepare(`SELECT COALESCE(SUM(monto),0) AS t FROM ingresos WHERE ${where}`).get(...args).t;
+      const detalle = db.prepare(
+        `SELECT id, monto, descripcion, fecha FROM ingresos WHERE ${where} ORDER BY fecha DESC, id DESC LIMIT 50`
+      ).all(...args);
+      return { ok: true, total, total_texto: fmtPesos(total), cantidad: detalle.length, detalle };
+    }
+
+    case 'consultar_balance': {
+      const cond = ['user_id = ?'];
+      const args = [userId];
+      if (input.desde) { cond.push('fecha >= ?'); args.push(normalizarFecha(input.desde)); }
+      if (input.hasta) { cond.push('fecha <= ?'); args.push(normalizarFecha(input.hasta)); }
+      const where = cond.join(' AND ');
+      const ingresos = db.prepare(`SELECT COALESCE(SUM(monto),0) AS t FROM ingresos WHERE ${where}`).get(...args).t;
+      const gastos = db.prepare(`SELECT COALESCE(SUM(monto),0) AS t FROM gastos WHERE ${where}`).get(...args).t;
+      const balance = ingresos - gastos;
+      return { ok: true, ingresos, gastos, balance, ingresos_texto: fmtPesos(ingresos), gastos_texto: fmtPesos(gastos), balance_texto: fmtPesos(balance) };
+    }
+
+    case 'borrar_ultimo': {
+      const tipo = input.tipo || 'ultimo';
+      const borrarDe = (tabla, etiqueta) => {
+        const row = db.prepare(`SELECT * FROM ${tabla} WHERE user_id = ? ORDER BY id DESC LIMIT 1`).get(userId);
+        if (!row) return null;
+        db.prepare(`DELETE FROM ${tabla} WHERE id = ?`).run(row.id);
+        return { etiqueta, row };
+      };
+      if (tipo === 'gasto') { const r = borrarDe('gastos', 'gasto'); return r ? { ok: true, borrado: r.etiqueta, monto: r.row.monto, monto_texto: fmtPesos(r.row.monto), descripcion: r.row.descripcion } : { ok: false, error: 'No hay gastos para borrar.' }; }
+      if (tipo === 'ingreso') { const r = borrarDe('ingresos', 'ingreso'); return r ? { ok: true, borrado: r.etiqueta, monto: r.row.monto, monto_texto: fmtPesos(r.row.monto), descripcion: r.row.descripcion } : { ok: false, error: 'No hay ingresos para borrar.' }; }
+      if (tipo === 'nota') { const r = borrarDe('notas', 'nota'); return r ? { ok: true, borrado: r.etiqueta, texto: r.row.texto } : { ok: false, error: 'No hay notas para borrar.' }; }
+      if (tipo === 'recordatorio') { const r = borrarDe('recordatorios', 'recordatorio'); return r ? { ok: true, borrado: r.etiqueta, texto: r.row.texto } : { ok: false, error: 'No hay recordatorios para borrar.' }; }
+      // 'ultimo': el mas reciente entre gasto e ingreso
+      const ug = db.prepare('SELECT id, monto, descripcion, creado_en FROM gastos WHERE user_id=? ORDER BY id DESC LIMIT 1').get(userId);
+      const ui = db.prepare('SELECT id, monto, descripcion, creado_en FROM ingresos WHERE user_id=? ORDER BY id DESC LIMIT 1').get(userId);
+      if (!ug && !ui) return { ok: false, error: 'No hay movimientos para borrar.' };
+      let cual = 'gasto', row = ug;
+      if (ug && ui) { if (String(ui.creado_en) > String(ug.creado_en)) { cual = 'ingreso'; row = ui; } }
+      else if (ui) { cual = 'ingreso'; row = ui; }
+      db.prepare(`DELETE FROM ${cual === 'gasto' ? 'gastos' : 'ingresos'} WHERE id = ?`).run(row.id);
+      return { ok: true, borrado: cual, monto: row.monto, monto_texto: fmtPesos(row.monto), descripcion: row.descripcion };
+    }
+
+    case 'corregir_ultimo': {
+      const tipo = input.tipo === 'ingreso' ? 'ingreso' : 'gasto';
+      const tabla = tipo === 'ingreso' ? 'ingresos' : 'gastos';
+      const row = db.prepare(`SELECT * FROM ${tabla} WHERE user_id = ? ORDER BY id DESC LIMIT 1`).get(userId);
+      if (!row) return { ok: false, error: `No hay ${tipo}s para corregir.` };
+      const sets = [];
+      const args = [];
+      if (input.monto != null) { sets.push('monto = ?'); args.push(input.monto); }
+      if (input.descripcion != null) { sets.push('descripcion = ?'); args.push(input.descripcion); }
+      if (tipo === 'gasto' && input.categoria != null) { sets.push('categoria = ?'); args.push(input.categoria); }
+      if (sets.length === 0) return { ok: false, error: 'No indicaste que corregir (monto, descripcion o categoria).' };
+      args.push(row.id);
+      db.prepare(`UPDATE ${tabla} SET ${sets.join(', ')} WHERE id = ?`).run(...args);
+      const nuevo = db.prepare(`SELECT * FROM ${tabla} WHERE id = ?`).get(row.id);
+      return { ok: true, tipo, monto: nuevo.monto, monto_texto: fmtPesos(nuevo.monto), categoria: nuevo.categoria, descripcion: nuevo.descripcion, fecha: nuevo.fecha };
     }
 
     case 'crear_recordatorio': {
