@@ -3,7 +3,7 @@ import db from '../db/index.js';
 import { procesarMensaje, procesarImagen } from './claude.js';
 import { transcribir } from './transcribe.js';
 import { estaAutorizado, esAdmin, agregarCliente, quitarCliente, listarClientes } from '../util/access.js';
-import { chequearLimite } from '../util/usage.js';
+import { chequearLimite, tokensDelDia, limiteDiario } from '../util/usage.js';
 import { generarExcel } from '../export/excel.js';
 import { generarPDF } from '../export/pdf.js';
 import { fmtPesos } from '../util/money.js';
@@ -46,6 +46,23 @@ bot.command('start', async (ctx) => {
     '"recordame mañana a las 9 llamar al contador".\n\n' +
     'Tocá el botón 📊 para ver tu resumen con gráficos.\n' +
     'Escribí /excel o /pdf para descargar tus datos.'
+  );
+});
+
+// --- /uso: consumo del dia (mensajes + tokens + costo estimado) ---
+bot.command('uso', async (ctx) => {
+  const t = tokensDelDia(ctx.from.id);
+  const lim = limiteDiario();
+  // Costo aprox en USD con tarifas de Haiku 4.5 (in $1, out $5, cache read $0.10 por millon)
+  const usd = (t.in_tok / 1e6) * 1 + (t.out_tok / 1e6) * 5 + (t.cache_read / 1e6) * 0.10 + (t.cache_write / 1e6) * 1.25;
+  await ctx.reply(
+    `📊 Uso de hoy\n` +
+    `Mensajes: ${lim > 0 ? `(tope ${lim}/día)` : '(sin tope)'}\n` +
+    `Tokens entrada: ${t.in_tok.toLocaleString('es-AR')}\n` +
+    `Tokens salida: ${t.out_tok.toLocaleString('es-AR')}\n` +
+    `Caché (lectura): ${t.cache_read.toLocaleString('es-AR')}\n` +
+    `Llamadas al modelo: ${t.llamadas}\n` +
+    `Costo estimado: US$${usd.toFixed(3)}`
   );
 });
 

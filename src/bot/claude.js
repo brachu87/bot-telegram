@@ -2,15 +2,22 @@ import Anthropic from '@anthropic-ai/sdk';
 import db from '../db/index.js';
 import { toolDefs, ejecutarTool } from './tools.js';
 import { construirSystemPrompt } from './prompt.js';
+import { registrarTokens } from '../util/usage.js';
 
-// Modelo configurable por env. Por defecto Sonnet (mas confiable llamando tools;
-// importante en una app de plata). Para ahorrar, se puede probar Haiku:
-// CLAUDE_MODEL=claude-haiku-4-5-20251001 (mas barato pero a veces no ejecuta la tool).
-const MODELO = process.env.CLAUDE_MODEL || 'claude-sonnet-4-6';
-const MAX_HISTORIAL = 20;    // cuantos mensajes previos recordamos por chat
-const MAX_ITERACIONES = 8;   // tope de vueltas del loop de tool use
+// Modelo configurable por env. Por defecto Haiku 4.5: 3x mas barato y suficiente
+// para ejecutar tools con descripciones claras. Si querés maxima fiabilidad podés
+// usar Sonnet: CLAUDE_MODEL=claude-sonnet-4-6
+const MODELO = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
+const MAX_HISTORIAL = 12;    // cuantos mensajes previos recordamos por chat
+const MAX_ITERACIONES = 6;   // tope de vueltas del loop de tool use
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Tools con punto de caché en la última definición: cachea TODO el bloque de tools
+// (~4.000 tokens) para no reenviarlo caro en cada llamada.
+const toolsCacheadas = toolDefs.map((t, i) =>
+  i === toolDefs.length - 1 ? { ...t, cache_control: { type: 'ephemeral' } } : t
+);
 
 // --- Historial persistido por chat (texto plano user/assistant) ---
 function cargarHistorial(userId, chatId) {
@@ -41,7 +48,8 @@ function guardarMensaje(userId, chatId, rol, contenido) {
  * textoParaHistorial es lo que se guarda como turno del usuario (ej: "[foto de ticket]").
  */
 async function correrLoop(userId, chatId, messages, textoParaHistorial) {
-  const system = construirSystemPrompt(userId);
+  const systemTexto = construirSystemPrompt(userId);
+  const system = [{ type: 'text', text: systemTexto, cache_control: { type: 'ephemeral' } }];
   const archivos = []; // archivos que las tools piden enviar (ej: exportar_datos)
   let respuestaFinal = '';
 
@@ -50,9 +58,10 @@ async function correrLoop(userId, chatId, messages, textoParaHistorial) {
       model: MODELO,
       max_tokens: 1024,
       system,
-      tools: toolDefs,
+      tools: toolsCacheadas,
       messages
     });
+    try { registrarTokens(userId, resp.usage); } catch { /* noop */ }
 
     messages.push({ role: 'assistant', content: resp.content });
 
@@ -103,8 +112,8 @@ export async function procesarMensaje(userId, chatId, textoUsuario) {
 export async function procesarImagen(userId, chatId, base64, mediaType = 'image/jpeg', caption = '') {
   const messages = cargarHistorial(userId, chatId);
   const instruccion =
-    'El usuario mando una foto de un ticket, factura o comprobante. Mira la imagen, identifica el TOTAL a pagar y registralo como gasto con registrar_gasto, ' +
-    'eligiendo una categoria adecuada (comida, transporte, servicios, etc.) y una descripcion corta (ej: el nombre del comercio). ' +
+    'El usuario mando una foto de un ticket, factura o comprobante. Mira la imagen, identifica el TOTAL, la categoria y una descripcion corta (ej: el comercio/proveedor) y registralo como gasto con la tool que corresponda: ' +
+    'si tiene Gestumio vinculado usá gestumio_cargar_gasto (es un gasto del negocio); si no, usá registrar_gasto. ' +
     (caption ? `El usuario aclaro: "${caption}". ` : '') +
     'Si NO se ve el total con claridad, no inventes: pedile al usuario que te diga el monto.';
   messages.push({
